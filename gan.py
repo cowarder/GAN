@@ -84,66 +84,85 @@ class Discriminator(nn.Module):
 		return score
 		
 
-#构建生成器和判别器模型
-generator = Generator()
-discriminator = Discriminator()
+def main():
 
+	device = "cuda" if torch.cuda.is_available() else "cpu"
 	
-#加载数据
-os.makedirs('mnist', exist_ok=True)
-dataloader = DataLoader(
-	datasets.MNIST('mnist', train=True, download=True,
-		transform=transforms.Compose([
-			transforms.ToTensor(),
-			transforms.Normalize((0.5, 0.5, 0.5),(0.5, 0.5, 0.5))
-		])),
-	batch_size=args.batch_size, shuffle=True)
+	#构建生成器和判别器模型
+	generator = Generator()
+	discriminator = Discriminator()
+	generator = generator.to(device)
+	discriminator = discriminator.to(device)
 
+	#加载数据
+	os.makedirs('mnist', exist_ok=True)
+	dataloader = DataLoader(
+		datasets.MNIST('mnist', train=True, download=True,
+			transform=transforms.Compose([
+				transforms.ToTensor(),
+				transforms.Normalize((0.5, 0.5, 0.5),(0.5, 0.5, 0.5))
+			])),
+		batch_size=args.batch_size, shuffle=True)
 
-#定义损失函数
-adversarial_loss = nn.BCELoss()
-
-device = "cuda" if torch.cuda.is_available() else "cpu"
-
-generator = generator.to(device)
-discriminator = discriminator.to(device)
-adversarial_loss = adversarial_loss.to(device)
-	
-#定义优化器
-optimizer_G = optim.Adam(generator.parameters(), lr=args.lr, betas=(args.b1, args.b2))
-optimizer_D = optim.Adam(discriminator.parameters(), lr=args.lr, betas=(args.b1, args.b2))
-
-
-
-batches_done = 0
-for epoch in range(args.epochs):
-
-	print("Epoch:{}".format(epoch))
-	for batch_idx, (imgs, target) in enumerate(dataloader):
+	#定义损失函数
+	adversarial_loss = nn.BCELoss()
+	adversarial_loss = adversarial_loss.to(device)
 		
-		valid = torch.ones(imgs.size(0), 1)
-		valid = valid.to(device)
-		fake = torch.zeros(imgs.size(0), 1).to(device)
-		fake = fake.to(device)
-		imgs = imgs.to(device)
-		
-		#train generator
-		optimizer_G.zero_grad()
-		z = torch.randn(imgs.size(0), args.latent_dim)
-		z = z.to(device)
-		gen_imgs = generator(z)
-		loss_g = adversarial_loss(discriminator(gen_imgs), valid)
-		loss_g.backward()
-		optimizer_G.step()
-		
-		#train discriminator
-		optimizer_D.zero_grad()
-		real_loss = adversarial_loss(discriminator(imgs), valid)
-		fake_loss = adversarial_loss(discriminator(gen_imgs.detach()), fake)
-		loss_d = (real_loss + fake_loss) / 2
-		loss_d.backward()
-		optimizer_D.step()
-		batches_done = epoch * len(dataloader) + batch_idx
-		if batches_done % args.log_interval == 0:
-			print("Generator loss:{}, Discriminator loss:{}".format(loss_g.item(), loss_d.item()))
-			save_image(gen_imgs.data[:25], 'mnist/generateddata/%d.png' % batches_done, nrow=5, normalize=True)
+	#定义优化器
+	optimizer_G = optim.Adam(generator.parameters(), lr=args.lr, betas=(args.b1, args.b2))
+	optimizer_D = optim.Adam(discriminator.parameters(), lr=args.lr, betas=(args.b1, args.b2))
+
+	#开始训练
+	for epoch in range(args.epochs):
+
+		print("Epoch:{}".format(epoch))
+		for batch_idx, (imgs, target) in enumerate(dataloader):
+			
+			valid = torch.ones(imgs.size(0), 1)
+			valid = valid.to(device)
+			fake = torch.zeros(imgs.size(0), 1).to(device)
+			fake = fake.to(device)
+			imgs = imgs.to(device)
+			
+			#train generator
+			optimizer_G.zero_grad()
+			z = torch.randn(imgs.size(0), args.latent_dim)
+			z = z.to(device)
+			gen_imgs = generator(z)
+			loss_g = adversarial_loss(discriminator(gen_imgs), valid)
+			loss_g.backward()
+			optimizer_G.step()
+			
+			#train discriminator
+			optimizer_D.zero_grad()
+			real_loss = adversarial_loss(discriminator(imgs), valid)
+			
+			"""
+				detach可以关闭一个tensor，使其不被tracking
+				
+				这里不可以使用gen_imgs.requires_grad=False来指定
+				
+				报错信息：
+					RuntimeError: you can only change requires_grad flags of leaf variables. 
+					If you want to use a computed variable in a subgraph that doesn't require 
+					differentiation use var_no_grad = var.detach()
+					
+				官方文档中对于leaf variable的解释是：
+					 If the Variable has been created by the user, its creator 
+						will beNone and we call such objects leaf Variables
+				
+				也就是说只有自己创建的tensor才能手动指定requires_grad
+				
+			"""
+			print(gen_imgs.requires_grad)
+			fake_loss = adversarial_loss(discriminator(gen_imgs.detach()), fake)
+			loss_d = (real_loss + fake_loss) / 2
+			loss_d.backward()
+			optimizer_D.step()
+			batches_done = epoch * len(dataloader) + batch_idx
+			if batches_done % args.log_interval == 0:
+				print("Generator loss:{}, Discriminator loss:{}".format(loss_g.item(), loss_d.item()))
+				save_image(gen_imgs.data[:25], 'mnist/generateddata/%d.png' % batches_done, nrow=5, normalize=True)
+				
+if __name__=="__main__":
+	main()
