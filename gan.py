@@ -130,8 +130,7 @@ def main():
 			z = z.to(device)
 			gen_imgs = generator(z)
 			loss_g = adversarial_loss(discriminator(gen_imgs), valid)
-			loss_g.backward()
-			optimizer_G.step()
+			
 			
 			#train discriminator
 			optimizer_D.zero_grad()
@@ -154,11 +153,15 @@ def main():
 				也就是说只有自己创建的tensor才能手动指定requires_grad
 				
 			"""
-			print(gen_imgs.requires_grad)
+			#print(gen_imgs.requires_grad)
+			#print(gen_imgs.detach().requires_grad)
 			fake_loss = adversarial_loss(discriminator(gen_imgs.detach()), fake)
 			loss_d = (real_loss + fake_loss) / 2
 			loss_d.backward()
 			optimizer_D.step()
+			
+			loss_g.backward()
+			optimizer_G.step()
 			batches_done = epoch * len(dataloader) + batch_idx
 			if batches_done % args.log_interval == 0:
 				print("Generator loss:{}, Discriminator loss:{}".format(loss_g.item(), loss_d.item()))
